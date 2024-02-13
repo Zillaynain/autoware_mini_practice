@@ -1,0 +1,12 @@
+<launch>
+    <node pkg="practice_1" name="publisher_1" type="publisher.py" output="screen" required="true" >
+         <param name="message"  value="Hello ROS at 2Hz!" />
+         <param name="rate" value="2" />
+    </node>
+    <node pkg="practice_1" name="publisher_2" type="publisher.py" output="screen" required="true" >
+         <param name="message"   value="Hello ROS at 10Hz!" />
+         <param name="rate" value="10" />
+    </node>
+
+    <node pkg="practice_1" name="subscriber" type="subscriber.py" output="screen" required="true"/>
+</launch>
