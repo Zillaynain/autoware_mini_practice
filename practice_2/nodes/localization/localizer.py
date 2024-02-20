@@ -54,21 +54,15 @@ class Localizer:
         current_pose_msg.pose.position.z = msg.height-self.undulation
         current_pose_msg.pose.orientation = orientation
         self.current_pose_pub.publish(current_pose_msg)
+        
+        
+        
+        current_velocity = TwistStamped()
+        current_velocity.header.stamp = msg.header.stamp
+        current_velocity.header.frame_id = "base_link"
+        current_velocity.twist.linear.x = math.sqrt(msg.north_velocity**2 + msg.east_velocity**2)
+        self.current_velocity_pub.publish(current_velocity)
 
-    # convert azimuth to yaw angle
-    def convert_azimuth_to_yaw(azimuth):
-        """
-        Converts azimuth to yaw. Azimuth is CW angle from the North. Yaw is CCW angle from the East.
-        :param azimuth: azimuth in radians
-        :return: yaw in radians
-        """
-        yaw = -azimuth + math.pi/2
-        # Clamp within 0 to 2 pi
-        if yaw > 2 * math.pi:
-            yaw = yaw - 2 * math.pi
-        elif yaw < 0:
-            yaw += 2 * math.pi
-        return yaw
 
     def run(self):
         rospy.spin()
