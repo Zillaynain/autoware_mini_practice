@@ -15,13 +15,17 @@ class Localizer:
 
         # Parameters
         #self.undulation = rospy.get_param('/undulation')
-        #utm_origin_lat = rospy.get_param('/utm_origin_lat')
-        #utm_origin_lon = rospy.get_param('/utm_origin_lon')
+        utm_origin_lat = rospy.get_param('/utm_origin_lat')
+        utm_origin_lon = rospy.get_param('/utm_origin_lon')
 
         # Internal variables
         self.crs_wgs84 = CRS.from_epsg(4326)
         self.crs_utm = CRS.from_epsg(25835)
         self.utm_projection = Proj(self.crs_utm)
+        
+        # create coordinate transformer
+        self.transformer = Transformer.from_crs(self.crs_wgs84, self.crs_utm)
+        self.origin_x, self.origin_y = self.transformer.transform(utm_origin_lat, utm_origin_lon)
 
         # Subscribers
         rospy.Subscriber('/novatel/oem7/inspva', INSPVA, self.transform_coordinates)
@@ -32,7 +36,8 @@ class Localizer:
         self.br = TransformBroadcaster()
 
     def transform_coordinates(self, msg):
-        print(msg.latitude, msg.longitude)
+        self.origin_x_b, self.origin_y_b = self.transformer.transform(msg.latitude, msg.longitude)
+        print("New", self.origin_x-self.origin_x_b, self.origin_y-self.origin_y_b )
 
     def run(self):
         rospy.spin()
