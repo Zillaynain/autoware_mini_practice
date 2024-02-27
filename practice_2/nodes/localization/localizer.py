@@ -37,10 +37,11 @@ class Localizer:
 
     def transform_coordinates(self, msg):
         self.origin_x_b, self.origin_y_b = self.transformer.transform(msg.latitude, msg.longitude)
-        print("New", self.origin_x-self.origin_x_b, self.origin_y-self.origin_y_b )
+        
         # calculate azimuth correction
         azimuth_correction = self.utm_projection.get_factors(msg.longitude, msg.latitude).meridian_convergence
-        y = convert_azimuth_to_yaw(azimuth_correction)
+        y = convert_azimuth_to_yaw(math.radians(msg.azimuth-azimuth_correction))
+        
         # Convert yaw to quaternion
         x, y, z, w = quaternion_from_euler(0, 0, y)
         orientation = Quaternion(x, y, z, w)
@@ -48,8 +49,8 @@ class Localizer:
         current_pose_msg = PoseStamped()
         current_pose_msg.header.stamp = msg.header.stamp
         current_pose_msg.header.frame_id = "map"
-        current_pose_msg.pose.position.x = self.origin_x-self.origin_x_b
-        current_pose_msg.pose.position.y = self.origin_y-self.origin_y_b
+        current_pose_msg.pose.position.x = self.origin_x_b-self.origin_x
+        current_pose_msg.pose.position.y = self.origin_y_b-self.origin_y
         current_pose_msg.pose.position.z = msg.height-self.undulation
         current_pose_msg.pose.orientation = orientation
         self.current_pose_pub.publish(current_pose_msg)
@@ -64,8 +65,8 @@ class Localizer:
         tf_stamped.header.stamp = msg.header.stamp
         tf_stamped.header.frame_id = "map"
         tf_stamped.child_frame_id = "base_link"
-        tf_stamped.transform.translation.x = self.origin_x-self.origin_x_b
-        tf_stamped.transform.translation.y = self.origin_y-self.origin_y_b
+        tf_stamped.transform.translation.x = self.origin_x_b-self.origin_x
+        tf_stamped.transform.translation.y = self.origin_y_b-self.origin_y
         tf_stamped.transform.translation.z = msg.height-self.undulation
         tf_stamped.transform.rotation = orientation
         self.br.sendTransform(tf_stamped)
