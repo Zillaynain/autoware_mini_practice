@@ -34,7 +34,6 @@ class Localizer:
         self.current_pose_pub = rospy.Publisher('current_pose', PoseStamped, queue_size=10)
         self.current_velocity_pub = rospy.Publisher('current_velocity', TwistStamped, queue_size=10)
         self.br = TransformBroadcaster()
-        
 
     def transform_coordinates(self, msg):
         self.origin_x_b, self.origin_y_b = self.transformer.transform(msg.latitude, msg.longitude)
@@ -55,14 +54,23 @@ class Localizer:
         current_pose_msg.pose.orientation = orientation
         self.current_pose_pub.publish(current_pose_msg)
         
-        
-        
         current_velocity = TwistStamped()
         current_velocity.header.stamp = msg.header.stamp
         current_velocity.header.frame_id = "base_link"
         current_velocity.twist.linear.x = math.sqrt(msg.north_velocity**2 + msg.east_velocity**2)
         self.current_velocity_pub.publish(current_velocity)
-
+        
+        tf_stamped = TransformStamped()
+        tf_stamped.header.stamp = msg.header.stamp
+        tf_stamped.header.frame_id = "map"
+        tf_stamped.child_frame_id = "base_link"
+        tf_stamped.transform.translation.x = self.origin_x-self.origin_x_b
+        tf_stamped.transform.translation.y = self.origin_y-self.origin_y_b
+        tf_stamped.transform.translation.z = msg.height-self.undulation
+        tf_stamped.transform.rotation = orientation
+        self.br.sendTransform(tf_stamped)
+        
+        
 
     def run(self):
         rospy.spin()
