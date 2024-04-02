@@ -37,8 +37,8 @@ class PurePursuitFollower:
        
         # prepare path - creates spatial tree, making the spatial queries more efficient
         prepare(path_linestring)
-        path_linestring = path_linestring
-        self.path_linestring = path_linestring
+        a = path_linestring
+        self.path_linestring = a
         
         # Create a distance to velocity interpolator for the path
         # collect waypoint x and y coordinates
@@ -68,6 +68,8 @@ class PurePursuitFollower:
         lookahead_distance = current_pose.distance(lookahead_point)
         steering_angle = np.arctan(2*self.wheel_base*np.sin(lookahead_heading-heading)/lookahead_distance)
         velocity = self.distance_to_velocity_interpolator(d_ego_from_path_start)
+        
+        print(d_ego_from_path_start)
         
         vehicle_cmd = VehicleCmd()
         vehicle_cmd.header.stamp = msg.header.stamp

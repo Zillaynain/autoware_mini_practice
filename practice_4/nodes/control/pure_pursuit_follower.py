@@ -37,8 +37,8 @@ class PurePursuitFollower:
        
         # prepare path - creates spatial tree, making the spatial queries more efficient
         prepare(path_linestring)
-        path_linestring = path_linestring
-        self.path_linestring = path_linestring
+        a = path_linestring
+        self.path_linestring = a
         
         # Create a distance to velocity interpolator for the path
         # collect waypoint x and y coordinates
