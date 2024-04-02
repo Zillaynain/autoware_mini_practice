@@ -14,7 +14,7 @@
     </node>
     
     <!-- Pure Pursuit Follower -->
-    <node pkg="practice_3" type="pure_pursuit_follower.py" name="pure_pursuit_follower" output="screen" required="true" >
+    <node pkg="practice_4" type="pure_pursuit_follower.py" name="pure_pursuit_follower" output="screen" required="true" >
         <param name="lookahead_distance"  value="$(arg lookahead_distance)" />
         <remap from="path" to="global_path"/>
     </node>

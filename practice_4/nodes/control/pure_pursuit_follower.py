@@ -33,12 +33,11 @@ class PurePursuitFollower:
         
     def path_callback(self, msg):
         # convert waypoints to shapely linestring
-        path_linestring = LineString([(w.pose.pose.position.x, w.pose.pose.position.y) for w in msg.waypoints])
-       
+        path_line= LineString([(w.pose.pose.position.x, w.pose.pose.position.y) for w in msg.waypoints])
         # prepare path - creates spatial tree, making the spatial queries more efficient
-        prepare(path_linestring)
-        a = path_linestring
-        self.path_linestring = a
+        prepare(path_line)
+        path_linestring = path_line
+        
         
         # Create a distance to velocity interpolator for the path
         # collect waypoint x and y coordinates
@@ -53,12 +52,19 @@ class PurePursuitFollower:
         # Extract velocity values at waypoints
         velocities = np.array([w.twist.twist.linear.x for w in msg.waypoints])
         distance_to_velocity_interpolator = interp1d(distances, velocities, kind='linear')
+        
+        self.path_linestring = path_linestring
+        print(self.path_linestring)
         self.distance_to_velocity_interpolator = distance_to_velocity_interpolator
         
     def current_pose_callback(self, msg):
-        
-        current_pose = Point([msg.pose.position.x, msg.pose.position.y])
-        d_ego_from_path_start = self.path_linestring.project(current_pose)
+    
+        # Check if self.path_linestring is not None
+        if self.path_linestring is not None:
+            current_pose = Point([msg.pose.position.x, msg.pose.position.y])
+            d_ego_from_path_start = self.path_linestring.project(current_pose)
+        else:
+            return
         
         # using euler_from_quaternion to get the heading angle
         _, _, heading = euler_from_quaternion([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])
