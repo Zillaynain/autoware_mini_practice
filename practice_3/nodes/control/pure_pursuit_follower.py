@@ -69,8 +69,6 @@ class PurePursuitFollower:
         steering_angle = np.arctan(2*self.wheel_base*np.sin(lookahead_heading-heading)/lookahead_distance)
         velocity = self.distance_to_velocity_interpolator(d_ego_from_path_start)
         
-        print(d_ego_from_path_start)
-        
         vehicle_cmd = VehicleCmd()
         vehicle_cmd.header.stamp = msg.header.stamp
         vehicle_cmd.header.frame_id = "base_link"
