@@ -18,11 +18,13 @@ class Lanelet2GlobalPlanner:
     
         # Parameters
         lanelet2_map_name = rospy.get_param("~lanelet2_map_name")
-        
         coordinate_transformer = rospy.get_param("/localization/coordinate_transformer")
         use_custom_origin = rospy.get_param("/localization/use_custom_origin")
         utm_origin_lat = rospy.get_param("/localization/utm_origin_lat")
         utm_origin_lon = rospy.get_param("/localization/utm_origin_lon")
+        
+        self.goal_point = None
+        self.current_location = None
 
         # Load the map using Lanelet2
         if coordinate_transformer == "utm":
@@ -30,14 +32,48 @@ class Lanelet2GlobalPlanner:
         else:
             raise RuntimeError('Only "utm" is supported for lanelet2 map loading')
         self.lanelet2_map = load(lanelet2_map_name, projector)
-    
+        
+        # traffic rules
+        traffic_rules = lanelet2.traffic_rules.create(lanelet2.traffic_rules.Locations.Germany,lanelet2.traffic_rules.Participants.VehicleTaxi)
+        # routing graph
+        self.graph = lanelet2.routing.RoutingGraph(self.lanelet2_map, traffic_rules)
     
         # Subscribers
-        rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.goal_callback)
+        rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.goal_callback) 
+        rospy.Subscriber('/localization/current_pose', PoseStamped, self.current_pose_callback) 
+        
         
     def goal_callback(self, msg):
         # loginfo message about receiving the goal point
-        rospy.loginfo("%s - goal position (%f, %f, %f) orientation (%f, %f, %f, %f) in %s frame", rospy.get_name(),msg.pose.position.x, msg.pose.position.y, msg.pose.position.z,msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z,msg.pose.orientation.w, msg.header.frame_id)
+        rospy.loginfo("%s - goal position (%f, %f, %f) orientation (%f, %f, %f, %f) in %s frame", rospy.get_name(),
+                    msg.pose.position.x, msg.pose.position.y, msg.pose.position.z,
+                    msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z,
+                    msg.pose.orientation.w, msg.header.frame_id)
+        
+        self.goal_point = BasicPoint2d(msg.pose.position.x, msg.pose.position.y)
+        #get start and end lanelets
+        start_lanelet = findNearest(self.lanelet2_map.laneletLayer, self.current_location, 1)[0][1]
+        goal_lanelet = findNearest(self.lanelet2_map.laneletLayer, self.goal_point, 1)[0][1]
+        
+        # find routing graph
+        route = self.graph.getRoute(start_lanelet, goal_lanelet, 0, True)
+        
+        if route is None:
+            rospy.logwarn("No route found in node: {}".format(rospy.get_name()))
+            return None
+        else:
+            # find shortest path
+            path = route.shortestPath()
+
+            # this returns LaneletSequence to a point where lane change would be necessary to continue
+            path_no_lane_change = path.getRemainingLane(start_lanelet)
+            return path_no_lane_change
+        print(path_no_lane_change)
+        
+        
+    def current_pose_callback(self, msg):
+        self.current_location = BasicPoint2d(msg.pose.position.x, msg.pose.position.y)
+
         
     def run(self):
         rospy.spin()
