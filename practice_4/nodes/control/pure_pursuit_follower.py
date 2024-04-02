@@ -65,7 +65,6 @@ class PurePursuitFollower:
             d_ego_from_path_start = self.path_linestring.project(current_pose)
         else:
             return
-        
         # using euler_from_quaternion to get the heading angle
         _, _, heading = euler_from_quaternion([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])
         
