@@ -13,6 +13,7 @@ from geometry_msgs.msg import PoseStamped
 from autoware_msgs.msg import Lane, Waypoint, WaypointState
 
 
+
 class Lanelet2GlobalPlanner:
 
     def __init__(self):
@@ -30,6 +31,7 @@ class Lanelet2GlobalPlanner:
         self.goal_point = None
         self.current_location = None
         self.waypoints = []
+
 
         # Load the map using Lanelet2
         if coordinate_transformer == "utm":
@@ -68,16 +70,15 @@ class Lanelet2GlobalPlanner:
         route = self.graph.getRoute(start_lanelet, goal_lanelet, 0, True)
         
         if route is None:
-            rospy.logwarn("No route found in node: {}".format(rospy.get_name()))
-            return None
+            return 
         else:
             # find shortest path
             path = route.shortestPath()
             # this returns LaneletSequence to a point where lane change would be necessary to continue
             path_no_lane_change = path.getRemainingLane(start_lanelet)
-            waypoints = self.lanelet_sequence_to_waypoints(path_no_lane_change)
-            print(waypoints)
-            self.publish_waypoints(waypoints)
+            self.waypoints = self.lanelet_sequence_to_waypoints(path_no_lane_change)
+            print("the",self.waypoints[-1].pose.pose.position.x)
+            self.publish_waypoints(self.waypoints)
             
 
     def current_pose_callback(self, msg):
@@ -88,11 +89,11 @@ class Lanelet2GlobalPlanner:
 
             if dist < self.distance_to_goal_limit:
                 self.waypoints = []
-                self.goal_point = None
+                #self.goal_point = None
                 self.publish_waypoints(self.waypoints)
                 rospy.logwarn("the goal has been reached, path has been cleared. ")
-            else:
-                pass
+                return
+            
 
     def lanelet_sequence_to_waypoints(self,path_no_lane_change): 
         waypoints = []
@@ -107,13 +108,15 @@ class Lanelet2GlobalPlanner:
                     # Check if it's not the first waypoint or if the previous waypoint is not the same as the current point
                     if not waypoints or (waypoints[-1].pose.pose.position.x != point.x and waypoints[-1].pose.pose.position.y != point.y):
                         # create Waypoint and get the coordinats from lanelet.centerline points
+               
                         waypoint = Waypoint()
                         waypoint.pose.pose.position.x = point.x
                         waypoint.pose.pose.position.y = point.y
                         waypoint.pose.pose.position.z = point.z
                         waypoint.twist.twist.linear.x = speed
-
                         waypoints.append(waypoint)
+        self.goal_point.x = waypoints[-1].pose.pose.position.x
+        self.goal_point.y = waypoints[-1].pose.pose.position.y
         return waypoints
 
     def publish_waypoints(self, waypoints):

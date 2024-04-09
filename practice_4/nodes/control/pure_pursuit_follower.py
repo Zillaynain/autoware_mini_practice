@@ -43,7 +43,6 @@ class PurePursuitFollower:
             # Create a distance to velocity interpolator for the path
             # collect waypoint x and y coordinates
             waypoints_xy = np.array([(w.pose.pose.position.x, w.pose.pose.position.y) for w in msg.waypoints])
-            print("waypoints_xy shape:", waypoints_xy.shape, len(waypoints_xy))
 
             # Calculate distances between points
             distances = np.cumsum(np.sqrt(np.sum(np.diff(waypoints_xy, axis=0)**2, axis=1)))
@@ -56,10 +55,10 @@ class PurePursuitFollower:
             distance_to_velocity_interpolator = interp1d(distances, velocities, kind='linear')
         
             self.path_linestring = path_linestring
-            print(self.path_linestring)
+            #print(self.path_linestring)
             self.distance_to_velocity_interpolator = distance_to_velocity_interpolator
         else:
-            return
+            self.path_linestring = None
     
     
     def current_pose_callback(self, msg):
