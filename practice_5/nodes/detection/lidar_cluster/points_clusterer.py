@@ -41,12 +41,12 @@ class PointsCluster:
         labels = self.cluster.labels_
 
         assert len(points) == len(labels), "Number of points and labels don't match."
+        #print('point shape:', points.shape)
+        #print('labels shape:', labels.shape)
         
         filtered_points = points[labels != -1]
         filtered_labels = labels[labels != -1]
         points_labeled = np.column_stack((filtered_points, filtered_labels))
-        
-        #print('labels shape:', points_labeled)
         
         # convert labelled points to PointCloud2 format
         data = unstructured_to_structured(points_labeled, dtype=np.dtype([('x', np.float32),('y', np.float32),('z', np.float32),('label', np.int32)]))

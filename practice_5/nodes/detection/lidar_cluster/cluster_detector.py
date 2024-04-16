@@ -32,7 +32,28 @@ class ClusterDetector:
 
 
     def cluster_callback(self, msg):
-        pass
+        data = numpify(msg)
+        points = structured_to_unstructured(data, dtype=np.float32)
+        print("-----------------cluster_callback-----------------")
+        print('points_shape before transform:', points.shape)
+        print("first row:", points[0])
+        if msg.header.frame_id != self.output_frame:
+            # fetch transform for target frame
+            try:
+                transform = self.tf_buffer.lookup_transform(self.output_frame, msg.header.frame_id, msg.header.stamp, rospy.Duration(self.transform_timeout))
+            except (TransformException, rospy.ROSTimeMovedBackwardsException) as e:
+               rospy.logwarn("%s - %s", rospy.get_name(), e)
+               return
+        tf_matrix = numpify(transform.transform).astype(np.float32)
+        # make copy of points
+        points = points.copy()
+        # turn into homogeneous coordinates
+        points[:,3] = 1
+        # transform points to target frame
+        points = points.dot(tf_matrix.T)
+        print("tf_matrix:",tf_matrix)
+        print("points_shape after transform:", points.shape)
+        print("first row:", points[0])
 
     def run(self):
         rospy.spin()
