@@ -51,12 +51,12 @@ class ClusterDetector:
         'stamp': msg.header.stamp,
         'frame_id': self.output_frame
         })
-        objects = DetectedObjectArray()
+        DetectedObject = DetectedObjectArray()
         
         if len(points)==0:
-            object.pose.position.x = 0
-            object.pose.position.y = 0
-            object.pose.position.z = 0
+            DetectedObject.pose.position.x = 0
+            DetectedObject.pose.position.y = 0
+            DetectedObject.pose.position.z = 0
 
         if len(label) == 0:
             clusters = 0
@@ -75,6 +75,7 @@ class ClusterDetector:
             points_2d = MultiPoint(points[mask,:2])
             hull = points_2d.convex_hull
             convex_hull_points = [Point32(x, y, centroid_z) for x, y in hull.exterior.coords]
+            DetectedObject.convex_hull.polygon.points
     
             object = DetectedObject(header=header)
             object.pose.position.x = centroid_x
@@ -88,7 +89,7 @@ class ClusterDetector:
             object.pose_reliable = True
             object.velocity_reliable = False
             object.acceleration_reliable = False
-            self.objects_pub.publish(object)
+        self.objects_pub.publish(object)
 
     def run(self):
         rospy.spin()
