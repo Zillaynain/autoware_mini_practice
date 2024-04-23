@@ -24,6 +24,7 @@ class ClusterDetector:
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer)
+        
 
         self.objects_pub = rospy.Publisher('detected_objects', DetectedObjectArray, queue_size=1, tcp_nodelay=True)
         rospy.Subscriber('points_clustered', PointCloud2, self.cluster_callback, queue_size=1, buff_size=2**24, tcp_nodelay=True)
@@ -51,45 +52,47 @@ class ClusterDetector:
         'stamp': msg.header.stamp,
         'frame_id': self.output_frame
         })
-        DetectedObject = DetectedObjectArray()
+        objects=DetectedObjectArray(header=header)
+ 
         
-        if len(points)==0:
-            DetectedObject.pose.position.x = 0
-            DetectedObject.pose.position.y = 0
-            DetectedObject.pose.position.z = 0
+        #if len(points)==0:
+         #   DetectedObject.pose.position.x = 0
+         #   DetectedObject.pose.position.y = 0
+         #   DetectedObject.pose.position.z = 0
 
         if len(label) == 0:
             clusters = 0
         else:
             clusters = np.max(label) + 1
             
+        # create mask
         for i in range(clusters):
             mask = (label == i)
-            if np.sum(mask) < self.min_cluster_size:
-                continue
-            # select points for one object from an array using a mask
-            # rows are selected using a binary mask and only first 3 columns are selected: x, y and z coordinates
             points3d = points[mask,:3]
+            if len(points3d) < self.min_cluster_size:
+                continue
             centroid_x, centroid_y, centroid_z = np.mean(points3d, axis=0)
             # create convex hull
             points_2d = MultiPoint(points[mask,:2])
             hull = points_2d.convex_hull
             convex_hull_points = [Point32(x, y, centroid_z) for x, y in hull.exterior.coords]
-            DetectedObject.convex_hull.polygon.points
-    
-            object = DetectedObject(header=header)
-            object.pose.position.x = centroid_x
-            object.pose.position.y = centroid_y
-            object.pose.position.z = centroid_z
-            object.id = i
-            object.label = "unknown"
-            object.color = BLUE80P
-            object.valid = True
-            object.space_frame = self.output_frame
-            object.pose_reliable = True
-            object.velocity_reliable = False
-            object.acceleration_reliable = False
-        self.objects_pub.publish(object)
+            
+            self.DetectedObject = DetectedObject(header=header)
+            self.DetectedObject.convex_hull.polygon.points = convex_hull_points
+            self.DetectedObject.pose.position.x = centroid_x
+            self.DetectedObject.pose.position.y = centroid_y
+            self.DetectedObject.pose.position.z = centroid_z
+            self.DetectedObject.id = i
+            self.DetectedObject.label = "unknown"
+            self.DetectedObject.color = BLUE80P
+            self.DetectedObject.valid = True
+            self.DetectedObject.space_frame = self.output_frame
+            self.DetectedObject.pose_reliable = True
+            self.DetectedObject.velocity_reliable = False
+            self.DetectedObject.acceleration_reliable = False
+            objects.objects.append(self.DetectedObject)
+        print(objects)
+        self.objects_pub.publish(objects)
 
     def run(self):
         rospy.spin()
