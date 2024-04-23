@@ -90,7 +90,6 @@ class SimpleLocalPlanner:
     def detected_objects_callback(self, msg):
         print("------ detected objects callback, number of objects: ", len(msg.objects))
         
-        """
         with self.lock:
             global_path_linestring = self.global_path_linestring 
             global_path_dist = self.global_path_distances
@@ -106,9 +105,8 @@ class SimpleLocalPlanner:
         if localPath is None:
             self.publish_local_path_wp([], msg.header.stamp, self.output_frame)
             return
-         """
-#        target_velocity = distance_to_velocity_interpolator(d_ego_from_path_start)
-#        print(target_velocity)
+        target_velocity = distance_to_velocity_interpolator(d_ego_from_path_start)
+        print(target_velocity)
         
         
 
