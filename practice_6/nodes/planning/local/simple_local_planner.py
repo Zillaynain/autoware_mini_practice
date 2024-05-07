@@ -82,13 +82,12 @@ class SimpleLocalPlanner:
         self.current_speed = msg.twist.linear.x
 
     def current_pose_callback(self, msg):
-        print("pose")
         # save current pose
         current_position = Point([msg.pose.position.x, msg.pose.position.y])
         self.current_position = current_position
 
     def detected_objects_callback(self, msg):
-        print("------ detected objects callback, number of objects: ", len(msg.objects))
+        #print("------ detected objects callback, number of objects: ", len(msg.objects))
         
         with self.lock:
             global_path_linestring = self.global_path_linestring 
@@ -106,7 +105,8 @@ class SimpleLocalPlanner:
             self.publish_local_path_wp([], msg.header.stamp, self.output_frame)
             return
         target_velocity = distance_to_velocity_interpolator(d_ego_from_path_start)
-        print(target_velocity)
+        localpath_wp = self.convert_local_path_to_waypoints(localPath, target_velocity)
+        self.publish_local_path_wp(localpath_wp, msg.header.stamp, self.output_frame)
         
         
 
