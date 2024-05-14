@@ -87,7 +87,7 @@ class SimpleLocalPlanner:
         self.current_position = current_position
 
     def detected_objects_callback(self, msg):
-        #print("------ detected objects callback, number of objects: ", len(msg.objects))
+        print("------ detected objects callback, number of objects: ", len(msg.objects))
         
         with self.lock:
             global_path_linestring = self.global_path_linestring 
@@ -108,6 +108,28 @@ class SimpleLocalPlanner:
         localpath_wp = self.convert_local_path_to_waypoints(localPath, target_velocity)
         self.publish_local_path_wp(localpath_wp, msg.header.stamp, self.output_frame)
         
+        # create a buffer around the local path
+        local_path_buffer = localPath.buffer(self.stopping_lateral_distance, cap_style="flat")
+        prepare(local_path_buffer)
+        #print("local_path_buffer:", local_path_buffer)
+        
+        #waypoints_xy = np.array([(obj.convex_hull.polygon.points.x, obj.convex_hull.polygon.points.y,) for obj in msg.objects])
+        #prepare(obj_hull)
+        #print("Object polygon:", waypoints_xy)
+        
+        for obj in msg.objects:
+            #obj_hull = obj.convex_hull
+            #print("Object polygon:", obj.convex_hull.polygon.points)
+            xy_tuples = [(point.x, point.y) for point in obj.convex_hull.polygon.points]
+            
+            obj_hull = Polygon(xy_tuples)
+            print(obj_hull)
+            #waypoints_xy = np.array([(obj.convex_hull.polygon.points.x, obj.convex_hull.polygon.points.y,) for obj in msg.objects])
+            #prepare(obj_hull)
+            #print("Object polygon:", waypoints_xy)
+            
+
+
         
 
     def extract_local_path(self, global_path_linestring, global_path_distances, d_ego_from_path_start, local_path_length):
