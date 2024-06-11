@@ -7,7 +7,7 @@ import numpy as np
 from autoware_msgs.msg import Lane, DetectedObjectArray, Waypoint
 from geometry_msgs.msg import PoseStamped, TwistStamped, Vector3, Vector3Stamped
 from shapely.geometry import LineString, Point, Polygon
-from shapely import prepare
+from shapely import prepare, intersects
 from tf2_geometry_msgs import do_transform_vector3
 from scipy.interpolate import interp1d
 from numpy.lib.recfunctions import unstructured_to_structured
@@ -96,6 +96,10 @@ class SimpleLocalPlanner:
             current_position = self.current_position
             distance_to_velocity_interpolator = self.distance_to_velocity_interpolator
         
+        object_distances = []
+        object_velocities = []
+        object_braking_distances = []
+        
         if global_path_linestring is None or current_speed is None or current_position is None:
             self.publish_local_path_wp([], msg.header.stamp, self.output_frame)
             return
@@ -111,26 +115,93 @@ class SimpleLocalPlanner:
         # create a buffer around the local path
         local_path_buffer = localPath.buffer(self.stopping_lateral_distance, cap_style="flat")
         prepare(local_path_buffer)
-        #print("local_path_buffer:", local_path_buffer)
         
-        #waypoints_xy = np.array([(obj.convex_hull.polygon.points.x, obj.convex_hull.polygon.points.y,) for obj in msg.objects])
-        #prepare(obj_hull)
-        #print("Object polygon:", waypoints_xy)
-        
+        try:
+            transform = self.tf_buffer.lookup_transform(target_frame='base_link',
+                                                        source_frame=self.output_frame,
+                                                        time=msg.header.stamp,
+                                                        timeout=rospy.Duration(self.transform_timeout))
+                                                        
+        except (TransformException, rospy.ROSTimeMovedBackwardsException) as e:
+            rospy.logwarn("%s - %s", rospy.get_name(), e)
+            transform = None
+
         for obj in msg.objects:
-            #obj_hull = obj.convex_hull
-            #print("Object polygon:", obj.convex_hull.polygon.points)
+            
             xy_tuples = [(point.x, point.y) for point in obj.convex_hull.polygon.points]
-            
-            obj_hull = Polygon(xy_tuples)
-            print(obj_hull)
-            #waypoints_xy = np.array([(obj.convex_hull.polygon.points.x, obj.convex_hull.polygon.points.y,) for obj in msg.objects])
-            #prepare(obj_hull)
-            #print("Object polygon:", waypoints_xy)
-            
+            obj_hull_polygon = Polygon(xy_tuples)
 
+            dist = []
+            for coords in obj_hull_polygon.exterior.coords:
+                if intersects(local_path_buffer, Point(coords)):
+                    d = localPath.project(Point(coords))
+                    dist.append(d)
+            
+            object_velocity = object.velocity.linear
 
-        
+            if transform is not None:
+                vector3_stamped = Vector3Stamped(vector=object_velocity)
+                velocity = do_transform_vector3(vector3_stamped, transform).vector
+            else:
+                velocity = Vector3()
+            
+            transformed_velocity = velocity.x
+            
+            if len(dist) > 0:
+                min_dist = min(dist)  
+
+                object_distances.append(min_dist)
+                object_velocities.append(transformed_velocity)
+                object_braking_distances.append(self.braking_safety_distance_obstacle)
+
+        dist_to_goal_point = global_path_dist[-1] - d_ego_from_path_start
+
+        if dist_to_goal_point <= self.local_path_length:
+            object_distances.append(dist_to_goal_point)
+            object_velocities.append(0)
+            object_braking_distances.append(self.braking_safety_distance_goal)
+
+        object_distances = np.array(object_distances)
+        object_velocities = np.array(object_velocities)
+        object_braking_distances = np.array(object_braking_distances)
+
+        target_vel = target_velocity
+        closest_object_distance = 0.0   
+        closest_object_velocity = 0.0
+        stopping_point_distance = 0.0
+        local_path_blocked = False
+
+        if len(object_distances) > 0:
+            
+            target_distances = object_distances - self.current_pose_to_car_front - object_braking_distances - self.braking_reaction_time*np.abs(object_velocities)
+            object_velocities[object_velocities < 0] = 0
+            target_velocities_squared = object_velocities**2 + 2*self.default_deceleration*target_distances
+            
+            target_velocities_squared[target_velocities_squared < 0] = 0
+            target_velocities = np.sqrt(target_velocities_squared)
+
+            min_velId = np.argmin(target_velocities)
+            target_vel = target_velocities[min_velId]
+            targetVelocity = min(target_vel, target_velocity)
+
+            if object_braking_distances[min_velId] == self.braking_safety_distance_obstacle:
+                local_path_blocked=True
+            
+            closest_object_distance = object_distances[min_velId]
+            stopping_point_distance = object_distances[min_velId] - object_braking_distances[min_velId]
+            closest_object_velocity = object_velocities[min_velId]
+
+        local_path_waypoints = self.convert_local_path_to_waypoints(local_path=localPath,
+                                                            target_velocity=targetVelocity)
+
+        self.publish_local_path_wp(local_path_waypoints=local_path_waypoints, 
+                                stamp = msg.header.stamp, 
+                                output_frame = self.output_frame, 
+                                closest_object_distance=closest_object_distance, 
+                                closest_object_velocity=closest_object_velocity, 
+                                local_path_blocked=local_path_blocked,
+                                stopping_point_distance=stopping_point_distance)
+            
 
     def extract_local_path(self, global_path_linestring, global_path_distances, d_ego_from_path_start, local_path_length):
 
