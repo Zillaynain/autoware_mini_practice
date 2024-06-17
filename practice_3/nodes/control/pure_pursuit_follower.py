@@ -16,16 +16,18 @@ from scipy.interpolate import interp1d
 class PurePursuitFollower:
     def __init__(self):
 
-        # Parameters
-        self.path_linestring = None
-        self.distance_to_velocity_interpolator = None
         
         # Reading in the parameter values
         self.lookahead_distance = rospy.get_param("~lookahead_distance")
         self.wheel_base = rospy.get_param("/wheel_base")
         
+        # Global Variables
+        self.path_linestring = None
+        self.distance_to_velocity_interpolator = None
+        self.lock = threading.Lock()
+        
         # Publishers
-        self.vehicle_cmd_pub = rospy.Publisher('/control/vehicle_cmd', VehicleCmd, queue_size=10)
+        self.vehicle_cmd_pub = rospy.Publisher('/control/vehicle_cmd', VehicleCmd, queue_size=1)
 
         # Subscribers
         rospy.Subscriber('path', Lane, self.path_callback, queue_size=1)
@@ -38,11 +40,11 @@ class PurePursuitFollower:
         # prepare path - creates spatial tree, making the spatial queries more efficient
         prepare(path_linestring)
         a = path_linestring
-        self.path_linestring = a
+        
         
         # Create a distance to velocity interpolator for the path
         # collect waypoint x and y coordinates
-        waypoints_xy = np.array([(w.pose.pose.position.x, w.pose.pose.position.y) for w in msg.waypoints])
+        waypoints_xy = np.array([path_linestring])
         
         # Calculate distances between points
         distances = np.cumsum(np.sqrt(np.sum(np.diff(waypoints_xy, axis=0)**2, axis=1)))
@@ -53,22 +55,29 @@ class PurePursuitFollower:
         # Extract velocity values at waypoints
         velocities = np.array([w.twist.twist.linear.x for w in msg.waypoints])
         distance_to_velocity_interpolator = interp1d(distances, velocities, kind='linear')
-        self.distance_to_velocity_interpolator = distance_to_velocity_interpolator
+        
+        with self.lock:
+            self.path_linestring = a
+            self.distance_to_velocity_interpolator = distance_to_velocity_interpolator
         
     def current_pose_callback(self, msg):
+    
+        if self.path_linestring is not None or self.distance_to_velocity_interpolator is not None:
         
-        current_pose = Point([msg.pose.position.x, msg.pose.position.y])
-        d_ego_from_path_start = self.path_linestring.project(current_pose)
+            current_pose = Point([msg.pose.position.x, msg.pose.position.y])
+            d_ego_from_path_start = self.path_linestring.project(current_pose)
         
-        # using euler_from_quaternion to get the heading angle
-        _, _, heading = euler_from_quaternion([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])
+            # using euler_from_quaternion to get the heading angle
+            _, _, heading = euler_from_quaternion([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])
         
-        lookahead_point = self.path_linestring.interpolate(d_ego_from_path_start+self.lookahead_distance)
-        lookahead_heading = np.arctan2(lookahead_point.y - current_pose.y, lookahead_point.x - current_pose.x)
-        lookahead_distance = current_pose.distance(lookahead_point)
-        steering_angle = np.arctan(2*self.wheel_base*np.sin(lookahead_heading-heading)/lookahead_distance)
-        velocity = self.distance_to_velocity_interpolator(d_ego_from_path_start)
-        
+            lookahead_point = self.path_linestring.interpolate(d_ego_from_path_start+self.lookahead_distance)
+            lookahead_heading = np.arctan2(lookahead_point.y - current_pose.y, lookahead_point.x - current_pose.x)
+            lookahead_distance = current_pose.distance(lookahead_point)
+            steering_angle = np.arctan(2*self.wheel_base*np.sin(lookahead_heading-heading)/lookahead_distance)
+            velocity = self.distance_to_velocity_interpolator(d_ego_from_path_start)
+        else:
+            return
+            
         vehicle_cmd = VehicleCmd()
         vehicle_cmd.header.stamp = msg.header.stamp
         vehicle_cmd.header.frame_id = "base_link"

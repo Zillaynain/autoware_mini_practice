@@ -11,6 +11,9 @@ from shapely import prepare, intersects
 from tf2_geometry_msgs import do_transform_vector3
 from scipy.interpolate import interp1d
 from numpy.lib.recfunctions import unstructured_to_structured
+from lanelet2.io import Origin, load
+from lanelet2.projection import UtmProjector
+from autoware_msgs.msg import TrafficLightResultArray
 
 class SimpleLocalPlanner:
 
@@ -26,6 +29,11 @@ class SimpleLocalPlanner:
         self.stopping_lateral_distance = rospy.get_param("stopping_lateral_distance")
         self.current_pose_to_car_front = rospy.get_param("current_pose_to_car_front")
         self.default_deceleration = rospy.get_param("default_deceleration")
+        use_custom_origin = rospy.get_param("/localization/use_custom_origin")
+        utm_origin_lat = rospy.get_param("/localization/utm_origin_lat")
+        utm_origin_lon = rospy.get_param("/localization/utm_origin_lon")
+        coordinate_transformer = rospy.get_param("/localization/coordinate_transformer")
+        lanelet2_map_name = rospy.get_param("~lanelet2_map_name")
 
         # Variables
         self.lock = threading.Lock()
@@ -36,6 +44,20 @@ class SimpleLocalPlanner:
         self.current_position = None
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer)
+        self.red_id = None
+
+        # Load the map using Lanelet2
+        if coordinate_transformer == "utm":
+            projector = UtmProjector(Origin(utm_origin_lat, utm_origin_lon), use_custom_origin, False)
+        else:
+            raise RuntimeError('Only "utm" is supported for lanelet2 map loading')
+        lanelet2_map = load(lanelet2_map_name, projector)
+
+        # Extract all stop lines and signals from the lanelet2 map
+        all_stoplines = get_stoplines(lanelet2_map)
+        self.signals = get_stoplines_trafficlights_bulbs(lanelet2_map)
+        # If stopline_id is not in self.signals then it has no signals (traffic lights)
+        self.tfl_stoplines = {k: v for k, v in all_stoplines.items() if k in self.signals}
 
         # Publishers
         self.local_path_pub = rospy.Publisher('local_path', Lane, queue_size=1, tcp_nodelay=True)
@@ -45,6 +67,7 @@ class SimpleLocalPlanner:
         rospy.Subscriber('/localization/current_pose', PoseStamped, self.current_pose_callback, queue_size=1, tcp_nodelay=True)
         rospy.Subscriber('/localization/current_velocity', TwistStamped, self.current_velocity_callback, queue_size=1, tcp_nodelay=True)
         rospy.Subscriber('/detection/final_objects', DetectedObjectArray, self.detected_objects_callback, queue_size=1, buff_size=2**20, tcp_nodelay=True)
+        rospy.Subscriber('/detection/traffic_light_status', TrafficLightResultArray, self.tfl_callback, queue_size=1, tcp_nodelay=True)
 
 
     def path_callback(self, msg):
@@ -100,7 +123,7 @@ class SimpleLocalPlanner:
         object_velocities = []
         object_braking_distances = []
         
-        if global_path_linestring is None or current_speed is None or current_position is None or global_path_dist is None or distance_to_velocity_interpolator is None:
+        if global_path_linestring is None or current_speed is None or current_position is None:
             self.publish_local_path_wp([], msg.header.stamp, self.output_frame)
             return
         d_ego_from_path_start = global_path_linestring.project(current_position)
@@ -131,13 +154,14 @@ class SimpleLocalPlanner:
             xy_tuples = [(point.x, point.y) for point in obj.convex_hull.polygon.points]
             obj_hull_polygon = Polygon(xy_tuples)
             object_velocity = obj.velocity.linear
-            object_velocity = obj.velocity.linear
 
             dist = []
             for coords in obj_hull_polygon.exterior.coords:
                 if intersects(local_path_buffer, Point(coords)):
                     d = localPath.project(Point(coords))
                     dist.append(d)
+            
+            
 
             if transform is not None:
                 vector3_stamped = Vector3Stamped(vector=object_velocity)
@@ -145,15 +169,34 @@ class SimpleLocalPlanner:
             else:
                 velocity = Vector3()
             
-            trans_vel = velocity.x
+            transformed_velocity = velocity.x
             
             if len(dist) > 0:
-            
                 min_dist = min(dist)  
+
                 object_distances.append(min_dist)
-                object_velocities.append(trans_vel)
+                object_velocities.append(transformed_velocity)
                 object_braking_distances.append(self.braking_safety_distance_obstacle)
 
+        if self.red_id is not None:
+            red_id = self.red_id
+            red_line = self.tfl_stoplines[red_id]
+
+            if intersects(local_path_buffer, red_line):
+                intersection_geometry = local_path_buffer.intersection(red_line)
+                intersection_point = intersection_geometry.centroid
+
+                d_red_line = localPath.project(intersection_point)
+                vel_red_line = 0       
+
+                curr_decel = (current_speed**2)/(2*(d_red_line - self.braking_safety_distance_stopline))        
+
+                if curr_decel < self.braking_safety_distance_stopline:
+                    object_distances.append(d_red_line)
+                    object_velocities.append(vel_red_line)
+                    object_braking_distances.append(self.braking_safety_distance_stopline)
+                else:
+                    rospy.logwarn_throttle(3.0, f"{rospy.get_name()} - deceleration: {curr_decel}")
         dist_to_goal_point = global_path_dist[-1] - d_ego_from_path_start
 
         if dist_to_goal_point <= self.local_path_length:
@@ -174,7 +217,6 @@ class SimpleLocalPlanner:
         if len(object_distances) > 0:
             
             target_distances = object_distances - self.current_pose_to_car_front - object_braking_distances - self.braking_reaction_time*np.abs(object_velocities)
-            
             object_velocities[object_velocities < 0] = 0
             target_velocities_squared = object_velocities**2 + 2*self.default_deceleration*target_distances
             
@@ -253,9 +295,59 @@ class SimpleLocalPlanner:
         lane.cost = stopping_point_distance
         self.local_path_pub.publish(lane)
 
+    def tfl_callback(self, msg):
+        red_id = None
+        for result in msg.results:
+            recognition_result = result.recognition_result
+            if recognition_result == 0:
+                red_id = result.lane_id
+        
+        self.red_id = red_id
 
     def run(self):
         rospy.spin()
+        
+def get_stoplines(lanelet2_map):
+    """
+    Add all stop lines to a dictionary with stop_line id as key and stop_line as value
+    :param lanelet2_map: lanelet2 map
+    :return: {stop_line_id: stopline, ...}
+    """
+
+    stoplines = {}
+    for line in lanelet2_map.lineStringLayer:
+        if line.attributes:
+            if line.attributes["type"] == "stop_line":
+                # add stoline to dictionary and convert it to shapely LineString
+                stoplines[line.id] = LineString([(p.x, p.y) for p in line])
+
+    return stoplines
+
+def get_stoplines_trafficlights_bulbs(lanelet2_map):
+    """
+    Iterate over all regulatory_elements with subtype traffic light and extract the stoplines and sinals.
+    Organize the data into dictionary indexed by stopline id that contains a traffic_light id and light bulb data.
+    :param lanelet2_map: lanelet2 map
+    :return: {stopline_id: {traffic_light_id: [[bulb_id, bulb_color, x, y, z], ...], ...}, ...}
+    """
+
+    signals = {}
+
+    for reg_el in lanelet2_map.regulatoryElementLayer:
+        if reg_el.attributes["subtype"] == "traffic_light":
+            # ref_line is the stop line and there is only 1 stopline per traffic light reg_el
+            linkId = reg_el.parameters["ref_line"][0].id
+
+            for bulbs in reg_el.parameters["light_bulbs"]:
+                # plId represents the traffic light (pole), one stop line can be associated with multiple traffic lights
+                plId = bulbs.id
+                # one traffic light has red, yellow and green bulbs
+                bulb_data = [[bulb.id, bulb.attributes["color"], bulb.x, bulb.y, bulb.z] for bulb in bulbs]
+                # signals is a dictionary indexed by stopline id and contains dictionary of traffic lights indexed by pole id
+                # which in turn contains a list of bulbs
+                signals.setdefault(linkId, {}).setdefault(plId, []).extend(bulb_data)
+
+    return signals
 
 if __name__ == '__main__':
     rospy.init_node('simple_local_planner')

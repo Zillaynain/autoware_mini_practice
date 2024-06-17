@@ -27,11 +27,10 @@ class Lanelet2GlobalPlanner:
         lanelet2_map_name = rospy.get_param("~lanelet2_map_name")
         self.output_frame = rospy.get_param("~output_frame")
         self.distance_to_goal_limit = rospy.get_param("~distance_to_goal_limit")
-        self.speed_limit = rospy.get_param('~speed_limit') 
         
         self.goal_point = None
         self.current_location = None
-
+        self.waypoints = []
 
 
         # Load the map using Lanelet2
@@ -56,15 +55,12 @@ class Lanelet2GlobalPlanner:
         
         
     def goal_callback(self, msg):
-        if self.current_location == None:
-            rospy.logwarn("%s - current_pose not available", rospy.get_name())
-            return
         # loginfo message about receiving the goal point
         rospy.loginfo("%s - goal position (%f, %f, %f) orientation (%f, %f, %f, %f) in %s frame", rospy.get_name(),
                     msg.pose.position.x, msg.pose.position.y, msg.pose.position.z,
                     msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z,
                     msg.pose.orientation.w, msg.header.frame_id)
-        waypoints = []
+        
         self.goal_point = BasicPoint2d(msg.pose.position.x, msg.pose.position.y)
         #get start and end lanelets
         start_lanelet = findNearest(self.lanelet2_map.laneletLayer, self.current_location, 1)[0][1]
@@ -74,15 +70,15 @@ class Lanelet2GlobalPlanner:
         route = self.graph.getRoute(start_lanelet, goal_lanelet, 0, True)
         
         if route is None:
-            rospy.logwarn("%s - No route found", rospy.get_name())
             return 
         else:
             # find shortest path
             path = route.shortestPath()
             # this returns LaneletSequence to a point where lane change would be necessary to continue
             path_no_lane_change = path.getRemainingLane(start_lanelet)
-            waypoints = self.lanelet_sequence_to_waypoints(path_no_lane_change)
-            self.publish_waypoints(waypoints)
+            self.waypoints = self.lanelet_sequence_to_waypoints(path_no_lane_change)
+            print("the",self.waypoints[-1].pose.pose.position.x)
+            self.publish_waypoints(self.waypoints)
             
 
     def current_pose_callback(self, msg):
@@ -92,9 +88,11 @@ class Lanelet2GlobalPlanner:
             dist = ((self.goal_point.x - self.current_location.x)**2 + (self.goal_point.y - self.current_location.y)**2)**0.5
 
             if dist < self.distance_to_goal_limit:
-                self.publish_waypoints([])
-                self.goal_point = None 
+                self.waypoints = []
+                #self.goal_point = None
+                self.publish_waypoints(self.waypoints)
                 rospy.logwarn("the goal has been reached, path has been cleared. ")
+                return
             
 
     def lanelet_sequence_to_waypoints(self,path_no_lane_change): 
@@ -104,7 +102,7 @@ class Lanelet2GlobalPlanner:
                     speed_kmh = float(lanelet.attributes['speed_ref'])
                     speed = speed_kmh / 3.6
                 else:
-                    speed_kmh = self.speed_limit
+                    speed_kmh = rospy.get_param('~speed_limit') 
                     speed = speed_kmh / 3.6
                 for point in lanelet.centerline:
                     # Check if it's not the first waypoint or if the previous waypoint is not the same as the current point

@@ -3,16 +3,9 @@
 import rospy
 import numpy as np
 
-from shapely import MultiPoint
-from tf2_ros import TransformListener, Buffer, TransformException
 from numpy.lib.recfunctions import structured_to_unstructured, unstructured_to_structured
 from ros_numpy import numpify, msgify
-
 from sensor_msgs.msg import PointCloud2
-from autoware_msgs.msg import DetectedObjectArray, DetectedObject
-from std_msgs.msg import ColorRGBA, Header
-from geometry_msgs.msg import Point32
-
 from sklearn.cluster import DBSCAN
 
 
@@ -29,7 +22,7 @@ class PointsCluster:
         
         rospy.loginfo("%s - initialized", rospy.get_name())
         
-        self.cluster = DBSCAN()
+        self.cluster = DBSCAN(min_cluster_size, cluster_epsilon)
 
 
     def points_callback(self, msg):
@@ -41,8 +34,6 @@ class PointsCluster:
         labels = self.cluster.labels_
 
         assert len(points) == len(labels), "Number of points and labels don't match."
-        #print('point shape:', points.shape)
-        #print('labels shape:', labels.shape)
         
         filtered_points = points[labels != -1]
         filtered_labels = labels[labels != -1]
