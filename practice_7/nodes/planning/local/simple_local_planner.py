@@ -34,6 +34,7 @@ class SimpleLocalPlanner:
         utm_origin_lon = rospy.get_param("/localization/utm_origin_lon")
         coordinate_transformer = rospy.get_param("/localization/coordinate_transformer")
         lanelet2_map_name = rospy.get_param("~lanelet2_map_name")
+        self.braking_safety_distance_stopline = rospy.get_param("~braking_safety_distance_stopline")
 
         # Variables
         self.lock = threading.Lock()
@@ -90,6 +91,7 @@ class SimpleLocalPlanner:
 
             # extract velocity values at waypoints
             velocities = np.array([w.twist.twist.linear.x for w in msg.waypoints])
+
             # create interpolator
             distance_to_velocity_interpolator = interp1d(global_path_distances, velocities, kind='linear', bounds_error=False, fill_value=0.0)
 
@@ -110,8 +112,7 @@ class SimpleLocalPlanner:
         self.current_position = current_position
 
     def detected_objects_callback(self, msg):
-        #print("------ detected objects callback, number of objects: ", len(msg.objects))
-        
+
         with self.lock:
             global_path_linestring = self.global_path_linestring 
             global_path_dist = self.global_path_distances
@@ -132,8 +133,6 @@ class SimpleLocalPlanner:
             self.publish_local_path_wp([], msg.header.stamp, self.output_frame)
             return
         target_velocity = distance_to_velocity_interpolator(d_ego_from_path_start)
-        localpath_wp = self.convert_local_path_to_waypoints(localPath, target_velocity)
-        self.publish_local_path_wp(localpath_wp, msg.header.stamp, self.output_frame)
         
         # create a buffer around the local path
         local_path_buffer = localPath.buffer(self.stopping_lateral_distance, cap_style="flat")
@@ -161,8 +160,6 @@ class SimpleLocalPlanner:
                     d = localPath.project(Point(coords))
                     dist.append(d)
             
-            
-
             if transform is not None:
                 vector3_stamped = Vector3Stamped(vector=object_velocity)
                 velocity = do_transform_vector3(vector3_stamped, transform).vector
@@ -225,7 +222,7 @@ class SimpleLocalPlanner:
 
             min_velId = np.argmin(target_velocities)
             target_vel = target_velocities[min_velId]
-            targetVelocity = min(target_vel, target_velocity)
+            target_velocity = min(target_vel, target_velocity)
 
             if object_braking_distances[min_velId] == self.braking_safety_distance_obstacle:
                 local_path_blocked=True
@@ -235,7 +232,7 @@ class SimpleLocalPlanner:
             closest_object_velocity = object_velocities[min_velId]
 
         local_path_waypoints = self.convert_local_path_to_waypoints(local_path=localPath,
-                                                            target_velocity=targetVelocity)
+                                                            target_velocity=target_velocity)
 
         self.publish_local_path_wp(local_path_waypoints=local_path_waypoints, 
                                 stamp = msg.header.stamp, 

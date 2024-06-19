@@ -134,9 +134,6 @@ class CameraTrafficLightDetector:
         with self.lock:
             stoplines_on_path = self.stoplines_on_path
             transform_from_frame = self.transform_from_frame
-        
-        #tfl_status = TrafficLightResultArray()
-        #tfl_status.header.stamp = camera_image_msg.header.stamp
 
         image = self.bridge.imgmsg_to_cv2(camera_image_msg,  desired_encoding='rgb8')
         if self.rectify_image:
@@ -158,7 +155,6 @@ class CameraTrafficLightDetector:
                 return 
             rois.extend(self.calculate_roi_coordinates(stoplines_on_path=stoplines_on_path,
                                                   transform=transform))
-            print(rois)
             if len(rois) > 0:
                 roi_images = self.create_roi_images(image=image, rois=rois)
                 predictions = self.model.run(None, {'conv2d_1_input': roi_images})[0]
