@@ -33,8 +33,13 @@ class ClusterDetector:
 
 
     def cluster_callback(self, msg):
+
         data = numpify(msg)
-        label = data['label']
+        if data['label'] is None:
+            self.objects_pub.publish([], msg.header.stamp, self.output_frame)
+        else:
+            label = data['label']
+            
         points = structured_to_unstructured(data, dtype=np.float32)
         
         if msg.header.frame_id != self.output_frame:
@@ -43,22 +48,16 @@ class ClusterDetector:
             except (TransformException, rospy.ROSTimeMovedBackwardsException) as e:
                rospy.logwarn("%s - %s", rospy.get_name(), e)
                return
-        tf_matrix = numpify(transform.transform).astype(np.float32)
-        points = points.copy()
-        points[:,3] = 1
-        points = points.dot(tf_matrix.T)
+            tf_matrix = numpify(transform.transform).astype(np.float32)
+            points = points.copy()
+            points[:,3] = 1
+            points = points.dot(tf_matrix.T)
 
         header = Header(**{
         'stamp': msg.header.stamp,
         'frame_id': self.output_frame
         })
         objects=DetectedObjectArray(header=header)
- 
-        
-        #if len(points)==0:
-         #   DetectedObject.pose.position.x = 0
-         #   DetectedObject.pose.position.y = 0
-         #   DetectedObject.pose.position.z = 0
 
         if len(label) == 0:
             clusters = 0
@@ -77,20 +76,20 @@ class ClusterDetector:
             hull = points_2d.convex_hull
             convex_hull_points = [Point32(x, y, centroid_z) for x, y in hull.exterior.coords]
             
-            self.DetectedObject = DetectedObject(header=header)
-            self.DetectedObject.convex_hull.polygon.points = convex_hull_points
-            self.DetectedObject.pose.position.x = centroid_x
-            self.DetectedObject.pose.position.y = centroid_y
-            self.DetectedObject.pose.position.z = centroid_z
-            self.DetectedObject.id = i
-            self.DetectedObject.label = "unknown"
-            self.DetectedObject.color = BLUE80P
-            self.DetectedObject.valid = True
-            self.DetectedObject.space_frame = self.output_frame
-            self.DetectedObject.pose_reliable = True
-            self.DetectedObject.velocity_reliable = False
-            self.DetectedObject.acceleration_reliable = False
-            objects.objects.append(self.DetectedObject)
+            self.Object = DetectedObject(header=header)
+            self.Object.convex_hull.polygon.points = convex_hull_points
+            self.Object.pose.position.x = centroid_x
+            self.Object.pose.position.y = centroid_y
+            self.Object.pose.position.z = centroid_z
+            self.Object.id = i
+            self.Object.label = "unknown"
+            self.Object.color = BLUE80P
+            self.Object.valid = True
+            self.Object.space_frame = self.output_frame
+            self.Object.pose_reliable = True
+            self.Object.velocity_reliable = False
+            self.Object.acceleration_reliable = False
+            objects.objects.append(self.Object)
         print(objects)
         self.objects_pub.publish(objects)
 

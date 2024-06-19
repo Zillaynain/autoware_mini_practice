@@ -9,8 +9,6 @@ from sensor_msgs.msg import PointCloud2
 from sklearn.cluster import DBSCAN
 
 
-BLUE80P = ColorRGBA(0.0, 0.0, 1.0, 0.8)
-
 class PointsCluster:
     def __init__(self):
         self.min_cluster_size = rospy.get_param('~cluster_min_size')
@@ -22,7 +20,7 @@ class PointsCluster:
         
         rospy.loginfo("%s - initialized", rospy.get_name())
         
-        self.cluster = DBSCAN(min_cluster_size, cluster_epsilon)
+        self.cluster = DBSCAN(self.min_cluster_size, self.cluster_epsilon)
 
 
     def points_callback(self, msg):
