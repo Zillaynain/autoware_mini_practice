@@ -99,10 +99,12 @@ class Lanelet2GlobalPlanner:
 
     def lanelet_sequence_to_waypoints(self,path_no_lane_change): 
         waypoints = []
+        speed_kmh = self.speed_limit
+        speed = speed_kmh / 3.6
         for lanelet in path_no_lane_change:
                 if 'speed_ref' in lanelet.attributes:
-                    speed_kmh = float(lanelet.attributes['speed_ref'])
-                    speed = speed_kmh / 3.6
+                    speedkmh = float(lanelet.attributes['speed_ref'])/3.6
+                    speed = min(speed, speedkmh)
                 else:
                     speed_kmh = self.speed_limit
                     speed = speed_kmh / 3.6
