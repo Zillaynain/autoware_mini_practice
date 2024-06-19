@@ -54,11 +54,9 @@ class PurePursuitFollower:
             velocities = np.array([w.twist.twist.linear.x for w in msg.waypoints])
             distance_to_velocity_interpolator = interp1d(distances, velocities, kind='linear')
         
-            self.path_linestring = path_linestring
-            self.distance_to_velocity_interpolator = distance_to_velocity_interpolator
         else:
-            self.path_linestring = None
-            self.distance_to_velocity_interpolator = None
+            path_linestring = None
+            distance_to_velocity_interpolator = None
             
         with self.lock:
             self.path_linestring = path_linestring
@@ -66,18 +64,22 @@ class PurePursuitFollower:
     
     
     def current_pose_callback(self, msg):
+
+        with self.lock:
+            path_linestring = self.path_linestring 
+            distance_to_velocity_interpolator = self.distance_to_velocity_interpolator 
       
-        if self.path_linestring is not None or self.distance_to_velocity_interpolator is not None::
+        if path_linestring is not None or distance_to_velocity_interpolator is not None::
             current_pose = Point([msg.pose.position.x, msg.pose.position.y])
-            d_ego_from_path_start = self.path_linestring.project(current_pose)
+            d_ego_from_path_start = path_linestring.project(current_pose)
             # using euler_from_quaternion to get the heading angle
             _, _, heading = euler_from_quaternion([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])
         
-            lookahead_point = self.path_linestring.interpolate(d_ego_from_path_start+self.lookahead_distance)
+            lookahead_point = path_linestring.interpolate(d_ego_from_path_start+self.lookahead_distance)
             lookahead_heading = np.arctan2(lookahead_point.y - current_pose.y, lookahead_point.x - current_pose.x)
             lookahead_distance = current_pose.distance(lookahead_point)
             steering_angle = np.arctan(2*self.wheel_base*np.sin(lookahead_heading-heading)/lookahead_distance)
-            velocity = self.distance_to_velocity_interpolator(d_ego_from_path_start)
+            velocity = distance_to_velocity_interpolator(d_ego_from_path_start)
         else:
             steering_angle = 0.0
             velocity = 0.0
