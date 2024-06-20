@@ -77,7 +77,6 @@ class Lanelet2GlobalPlanner:
             # this returns LaneletSequence to a point where lane change would be necessary to continue
             path_no_lane_change = path.getRemainingLane(start_lanelet)
             self.waypoints = self.lanelet_sequence_to_waypoints(path_no_lane_change)
-            print("the",self.waypoints[-1].pose.pose.position.x)
             self.publish_waypoints(self.waypoints)
             
 
@@ -89,7 +88,7 @@ class Lanelet2GlobalPlanner:
 
             if dist < self.distance_to_goal_limit:
                 self.waypoints = []
-                #self.goal_point = None
+                self.goal_point = None
                 self.publish_waypoints(self.waypoints)
                 rospy.logwarn("the goal has been reached, path has been cleared. ")
                 return
