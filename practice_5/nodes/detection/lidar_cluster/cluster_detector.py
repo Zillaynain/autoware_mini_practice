@@ -60,10 +60,8 @@ class ClusterDetector:
         })
 
         objects=DetectedObjectArray(header=header)
-
-        if len(label) == 0:
-            clusters = 0
-        else:
+        clusters = 0
+        if len(label) > 0:
             clusters = np.max(label) + 1
             
         # create mask
