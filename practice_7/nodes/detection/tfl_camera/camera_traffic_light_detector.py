@@ -115,7 +115,7 @@ class CameraTrafficLightDetector:
                 if local_path.intersects(linestring):
                     stoplines_on_path.append(id)
         else:
-            stoplines_on_path = None
+            stoplines_on_path = []
 
         with self.lock:
             self.stoplines_on_path = stoplines_on_path
