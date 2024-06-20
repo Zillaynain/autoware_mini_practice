@@ -20,14 +20,13 @@ class PointsCluster:
         
         rospy.loginfo("%s - initialized", rospy.get_name())
         
-        self.cluster = DBSCAN(self.min_cluster_size, self.cluster_epsilon)
+        self.cluster = DBSCAN(eps=self.cluster_epsilon, min_samples=self.min_cluster_size)
 
 
     def points_callback(self, msg):
         data = numpify(msg)
         points = structured_to_unstructured(data[['x', 'y', 'z']], dtype=np.float32)
         
-        self.cluster.set_params(eps=self.cluster_epsilon, min_samples=self.min_cluster_size)
         self.cluster.fit_predict(points)
         labels = self.cluster.labels_
 
