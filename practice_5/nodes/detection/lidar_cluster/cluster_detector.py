@@ -35,10 +35,11 @@ class ClusterDetector:
     def cluster_callback(self, msg):
 
         data = numpify(msg)
-        if data['label'] is None:
+        label = data['label']
+
+        if len(label) == 0:
             self.objects_pub.publish([], msg.header.stamp, self.output_frame)
-        else:
-            label = data['label']
+            return
             
         points = structured_to_unstructured(data, dtype=np.float32)
         
@@ -57,6 +58,7 @@ class ClusterDetector:
         'stamp': msg.header.stamp,
         'frame_id': self.output_frame
         })
+
         objects=DetectedObjectArray(header=header)
 
         if len(label) == 0:
@@ -76,21 +78,21 @@ class ClusterDetector:
             hull = points_2d.convex_hull
             convex_hull_points = [Point32(x, y, centroid_z) for x, y in hull.exterior.coords]
             
-            self.Object = DetectedObject(header=header)
-            self.Object.convex_hull.polygon.points = convex_hull_points
-            self.Object.pose.position.x = centroid_x
-            self.Object.pose.position.y = centroid_y
-            self.Object.pose.position.z = centroid_z
-            self.Object.id = i
-            self.Object.label = "unknown"
-            self.Object.color = BLUE80P
-            self.Object.valid = True
-            self.Object.space_frame = self.output_frame
-            self.Object.pose_reliable = True
-            self.Object.velocity_reliable = False
-            self.Object.acceleration_reliable = False
-            objects.objects.append(self.Object)
-        print(objects)
+            object = DetectedObject(header=header)
+            object.convex_hull.polygon.points = convex_hull_points
+            object.pose.position.x = centroid_x
+            object.pose.position.y = centroid_y
+            object.pose.position.z = centroid_z
+            object.id = i
+            object.label = "unknown"
+            object.color = BLUE80P
+            object.valid = True
+            object.space_frame = self.output_frame
+            object.pose_reliable = True
+            object.velocity_reliable = False
+            object.acceleration_reliable = False
+            objects.objects.append(object)
+        
         self.objects_pub.publish(objects)
 
     def run(self):
