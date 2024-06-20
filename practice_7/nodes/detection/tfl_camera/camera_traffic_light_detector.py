@@ -104,18 +104,16 @@ class CameraTrafficLightDetector:
 
     def local_path_callback(self, local_path_msg):
 
-        if len(local_path_msg.waypoints) > 0:
-            # used in calculate_roi_coordinates to filter out only relevant signals
-            stoplines_on_path = []
+        # used in calculate_roi_coordinates to filter out only relevant signals
+        stoplines_on_path = []
 
+        if len(local_path_msg.waypoints) > 0:
             waypoints = [(wp.pose.pose.position.x, wp.pose.pose.position.y) for wp in local_path_msg.waypoints]
             local_path = LineString(waypoints)
 
             for id, linestring in self.tfl_stoplines.items():
                 if local_path.intersects(linestring):
                     stoplines_on_path.append(id)
-        else:
-            stoplines_on_path = []
 
         with self.lock:
             self.stoplines_on_path = stoplines_on_path
